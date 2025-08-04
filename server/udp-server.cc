@@ -62,8 +62,12 @@ bool udp_server_init(int port) {
 void udp_server_run_blocking(CompositeFlaschenTaschen *display,
                              ft::Mutex *mutex) {
     static const int kBufferSize = 65535;  // maximum UDP has to offer.
-    char *packet_buffer = new char[kBufferSize];
-    bzero(packet_buffer, kBufferSize);
+    static const int N = 6;
+    char *packet_buffer[N];
+    for (int i = 0; i < N; ++i) {
+		packet_buffer[i] = new char[kBufferSize];
+		bzero(packet_buffer[i], kBufferSize);
+    }
 
     struct sigaction sa = {{0}};  // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53119
     sa.sa_handler = InterruptHandler;
@@ -73,42 +77,56 @@ void udp_server_run_blocking(CompositeFlaschenTaschen *display,
     for (;;) {
         // TODO: also store src-address in case we want to do rate-limiting
         // per source-address.
-        ssize_t received_bytes = recvfrom(server_socket,
-                                          packet_buffer, kBufferSize,
-                                          0, NULL, 0);
-        if (interrupt_received)
-            break;
+        
+        ssize_t received_bytes[N] = {};
+		for (int i = 0; i < N; ++i) {
+			received_bytes[i] = recvfrom(server_socket,
+											  packet_buffer[i], kBufferSize,
+											  0, NULL, 0);
+			if (interrupt_received)
+				break;
 
-        if (received_bytes < 0 && errno == EINTR) // Other signals. Don't care.
-            continue;
+			if (received_bytes[i] < 0 && errno == EINTR) // Other signals. Don't care.
+				continue;
 
-        if (received_bytes < 0) {
-            perror("Trouble receiving.");
-            break;
+			if (received_bytes[i] < 0) {
+				perror("Trouble receiving.");
+				break;
+			}
+		}
+
+		for (int i = 0; i < N; ++i) {
+			ImageMetaInfo img_info = {0};
+			img_info.width = display->width();  // defaults.
+			img_info.height = display->height();
+			const char *pixel_pos = ReadImageData(packet_buffer[i], received_bytes[i],
+												  &img_info);
+			if (pixel_pos == NULL) continue;
+			mutex->Lock();
+			display->SetLayer(img_info.layer);
+			for (int y = 0; y < img_info.height; ++y) {
+				for (int x = 0; x < img_info.width; ++x) {
+					Color c;
+					c.r = *pixel_pos++;
+					c.g = *pixel_pos++;
+					c.b = *pixel_pos++;
+					display->SetPixel(x + img_info.offset_x,
+									  y + img_info.offset_y,
+									  c);
+				}
+			}
+			display->SetLayer(0);  // Back to sane default.
+			mutex->Unlock();
+
+		    //fprintf(stderr, "rcv ofs: %d\n", img_info.offset_y);
         }
 
-        ImageMetaInfo img_info = {0};
-        img_info.width = display->width();  // defaults.
-        img_info.height = display->height();
-
-        const char *pixel_pos = ReadImageData(packet_buffer, received_bytes,
-                                              &img_info);
-        mutex->Lock();
-        display->SetLayer(img_info.layer);
-        for (int y = 0; y < img_info.height; ++y) {
-            for (int x = 0; x < img_info.width; ++x) {
-                Color c;
-                c.r = *pixel_pos++;
-                c.g = *pixel_pos++;
-                c.b = *pixel_pos++;
-                display->SetPixel(x + img_info.offset_x,
-                                  y + img_info.offset_y,
-                                  c);
-            }
-        }
-        display->Send();
-        display->SetLayer(0);  // Back to sane default.
-        mutex->Unlock();
+		mutex->Lock();
+		display->Send();
+		mutex->Unlock();
     }
-    delete [] packet_buffer;
+ 
+	for (int i = 0; i < N; ++i) {
+		delete [] packet_buffer[i];
+	}
 }
