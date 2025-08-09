@@ -24,22 +24,21 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <list>
-#include <strings.h>
 
 #include "servers.h"
 
 // public interface
 static int server_socket = -1;
-bool UDPServer::init_server(int port) {
-    if ((server_socket = socket(PF_INET6, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
+static struct sockaddr_in addr = {0};
+std::list<pthread_t> threads = std::list<pthread_t>();
+
+bool TCPServer::init_server(int port) {
+    if ((server_socket = socket(PF_INET6, SOCK_STREAM, 0)) < 0) {
         perror("IPv6 enabled ? While reating listen socket");
         return false;
     }
     int opt = 0;   // Unset IPv6-only, in case it is set. Best effort.
     setsockopt(server_socket, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt));
-
-    opt = 1;
-    setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 
     struct sockaddr_in6 addr = {0};
     addr.sin6_family = AF_INET6;
@@ -49,53 +48,51 @@ bool UDPServer::init_server(int port) {
         perror("bind");
         return false;
     }
-
-    fprintf(stderr, "UDP-server: ready to listen on %d\n", port);
+    // max 15 sockets
+    listen ( server_socket, 15 );
+    fprintf(stderr, "TCP-server: ready to listen on %d\n", port);
     return true;
 }
 
-void UDPServer::run_thread(CompositeFlaschenTaschen *display,
+void TCPServer::run_thread(CompositeFlaschenTaschen *display,
                              ft::Mutex *mutex) {
-    static const int kBufferSize = 65535;  // maximum UDP has to offer.
-    char *packet_buffer = new char[kBufferSize];
-    bzero(packet_buffer, kBufferSize);
-
-    // Make sure the kernel keeps enough pending packets in case we have a
-    // large display.
-    const int kMinReceiveBuffer = 3 * 65535;
-    const int kBufferMinimumFullFrameCount = 3;
-    const int full_frame_data = display->width() * display->height() * 3 + 1024;
-    int recv_size = kBufferMinimumFullFrameCount * full_frame_data;
-    if (recv_size < kMinReceiveBuffer) {
-      recv_size = kMinReceiveBuffer; // Small displays should have a minimum.
-    }
-    if (setsockopt(server_socket, SOL_SOCKET, SO_RCVBUF, //
-                   &recv_size, sizeof(recv_size)) < 0) {
-      fprintf(stderr,
-              "Can not set a comfortable receive buffer size.\n"
-              "Consider setting at least\n"
-              "sudo sysctl -w net.core.rmem_max=%d\n",
-              recv_size);
-    }
+    socklen_t addrlen = sizeof (struct sockaddr_in);
 
     struct sigaction sa = {{0}};  // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=53119
-    sa.sa_handler = InterruptHandler;
+    sa.sa_handler = Server::InterruptHandler;
     sigaction(SIGTERM, &sa, NULL);
     sigaction(SIGINT, &sa, NULL);
+
+    int new_socket = -1;
 
     pthread_t thread;
     arg_struct args;
     if (use_constant_async_fps){
         args = arg_struct(0, display, mutex);
         pthread_create(&thread, NULL, Server::periodically_send_to_display, (void*)&args);
+        threads.push_back(thread);
+    }
+    for (;;) {
+        if (interrupt_received)
+            break;
+
+        new_socket = accept( server_socket, (struct sockaddr *) &addr, &addrlen);
+
+        if (new_socket <= 0){
+            continue;
+        }
+
+        // since tcp and udp server using the same main loop, the function was outsourced to servers.cc
+        // create new thread for every socket connection
+        args = arg_struct(new_socket, display, mutex);
+        pthread_create(&thread, NULL, Server::receive_data_and_set_display_pixel, (void*)&args);
+        threads.push_back(thread);
     }
 
-    // since tcp and udp server using the same main loop, the function was outsourced to servers.cc
-    args = arg_struct(server_socket, display, mutex);
-    Server::receive_data_and_set_display_pixel(&args);
-
-    if (use_constant_async_fps){
-      pthread_join( thread, NULL);
+    while (!threads.empty())
+    {
+      pthread_join( threads.back(), NULL);
+      threads.pop_back();
     }
-    delete [] packet_buffer;
+    close (server_socket);
 }
