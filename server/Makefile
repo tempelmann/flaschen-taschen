@@ -35,7 +35,7 @@
 #    clients sending images to the server at once. If 0 the server tries to
 #    show every images received. (Can lead to artifacts)
 
-FT_BACKEND=terminal
+FT_BACKEND=rgb-matrix
 PROTOCOL=udp
 CONSTANT_FPS=0
 
@@ -86,7 +86,7 @@ ifeq ($(PROTOCOL), tcp)
 endif
 
 CFLAGS=-Wall -O3 $(INCLUDES) $(DEFINES)
-CXXFLAGS=$(CFLAGS) -std=c++03
+CXXFLAGS=$(CFLAGS)
 LDFLAGS+=-lpthread -lpng
 DEFINES+=-DCONSTANT_FPS=$(CONSTANT_FPS)
 

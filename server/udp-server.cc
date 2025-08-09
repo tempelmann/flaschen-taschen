@@ -27,6 +27,7 @@
 #include <strings.h>
 
 #include "servers.h"
+#include "composite-flaschen-taschen.h"
 
 // public interface
 static int server_socket = -1;

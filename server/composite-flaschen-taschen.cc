@@ -32,7 +32,7 @@ public:
     TypedScreenBuffer(int width, int height)
         : width_(width), height_(height),
           screen_(new T [ width * height]) {
-        bzero(screen_, width * height * sizeof(T));
+        // gives warning: bzero(screen_, width * height * sizeof(T));
     }
 
     ~TypedScreenBuffer() { delete [] screen_; }
