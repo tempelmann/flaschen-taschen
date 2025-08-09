@@ -28,7 +28,7 @@
 #    This requires the project to be checked out with submodules
 #    (git clone --recursive)
 #
-FT_BACKEND=terminal
+FT_BACKEND=rgb-matrix
 
 # Spixel related. It is checked out as as submodule in spixels/
 SPIXELS_INCDIR=spixels/include
