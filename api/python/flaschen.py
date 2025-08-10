@@ -16,7 +16,7 @@
 
 import socket
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 # Netpbm header with Flaschen Taschen offset included.
 _HEADER_P6_FT = b"""\
@@ -29,7 +29,7 @@ P6
 class Flaschen(object):
   '''A Framebuffer display interface that sends a frame via UDP.'''
 
-  def __init__(self, host, port, width=0, height=0, layer=5, transparent=False):
+  def __init__(self, host, port, width=0, height=0, layer=5, transparent=False, sockType=socket.SOCK_DGRAM):
     '''
     Args:
       host: The flaschen taschen server hostname or ip address.
@@ -43,7 +43,7 @@ class Flaschen(object):
     self.height = height
     self.layer = layer
     self.transparent = transparent
-    self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    self._sock = socket.socket(socket.AF_INET, sockType)
     self._sock.connect((host, port))
     header = _HEADER_P6_FT % {
       b"width": self.width,
@@ -59,7 +59,7 @@ class Flaschen(object):
   @property
   def __array_interface__(self):
     '''An array interface to directly access the framebuffer pixel data.
-    
+
     Direct writes to pixel data will ignore the transparent parameter.
     '''
     return {
@@ -87,7 +87,7 @@ class Flaschen(object):
     self._data[offset] = color[0]
     self._data[offset + 1] = color[1]
     self._data[offset + 2] = color[2]
-  
+
   def send(self):
     '''Send the updated pixels to the display.'''
     self._sock.send(self._data)

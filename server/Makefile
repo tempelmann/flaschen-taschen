@@ -36,7 +36,7 @@
 #    show every images received. (Can lead to artifacts)
 
 FT_BACKEND=rgb-matrix
-PROTOCOL=udp
+PROTOCOL=tcp
 CONSTANT_FPS=0
 
 # Spixel related. It is checked out as as submodule in spixels/
