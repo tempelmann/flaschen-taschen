@@ -38,6 +38,19 @@ static void InterruptHandler(int signo) {
 
 // public interface
 static int server_socket = -1;
+static const char kSizeQueryMarker[] = "#FT:SIZE?";
+static const char kSizeResponseFormat[] = "#FT:SIZE %d %d\n";
+
+static bool IsSizeQuery(const char *buffer, ssize_t len) {
+    const size_t marker_len = strlen(kSizeQueryMarker);
+    if (len < (ssize_t) marker_len) return false;
+    for (ssize_t pos = 0; pos <= len - (ssize_t) marker_len; ++pos) {
+        if (memcmp(buffer + pos, kSizeQueryMarker, marker_len) == 0)
+            return true;
+    }
+    return false;
+}
+
 bool udp_server_init(int port) {
     if ((server_socket = socket(PF_INET6, SOCK_DGRAM, IPPROTO_UDP)) < 0) {
         perror("IPv6 enabled ? While reating listen socket");
@@ -92,11 +105,13 @@ void udp_server_run_blocking(CompositeFlaschenTaschen *display,
     sigaction(SIGINT, &sa, NULL);
 
     for (;;) {
-        // TODO: also store src-address in case we want to do rate-limiting
-        // per source-address.
+        struct sockaddr_storage client_addr;
+        socklen_t client_addr_len = sizeof(client_addr);
         ssize_t received_bytes = recvfrom(server_socket,
                                           packet_buffer, kBufferSize,
-                                          0, NULL, 0);
+                                          0,
+                                          (struct sockaddr *) &client_addr,
+                                          &client_addr_len);
         if (interrupt_received)
             break;
 
@@ -106,6 +121,20 @@ void udp_server_run_blocking(CompositeFlaschenTaschen *display,
         if (received_bytes < 0) {
             perror("Trouble receiving.");
             break;
+        }
+
+        if (IsSizeQuery(packet_buffer, received_bytes)) {
+            char response[64];
+            const int response_len = snprintf(response, sizeof(response),
+                                              kSizeResponseFormat,
+                                              display->width(),
+                                              display->height());
+            if (sendto(server_socket, response, response_len, 0,
+                       (struct sockaddr *) &client_addr,
+                       client_addr_len) < 0) {
+                perror("Trouble responding to display size query.");
+            }
+            continue;
         }
 
         ImageMetaInfo img_info = {0};

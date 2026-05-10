@@ -42,6 +42,7 @@ static int usage(const char *progname) {
     fprintf(stderr, "usage: %s [options] [<TEXT>|-i <textfile>]\n", progname);
     fprintf(stderr, "Options:\n"
             "\t-g <width>x<height>[+<off_x>+<off_y>[+<layer>]] : Output geometry. Default 45x<font-height>+0+0+1\n"
+            "\t-G              : Query display for width and height.\n"
             "\t-l <layer>      : Layer 0..15. Default 1 (note if also given in -g, then last counts)\n"
             "\t-h <host>       : Flaschen-Taschen display hostname.\n"
             "\t-f <fontfile>   : Path to *.bdf font file\n"
@@ -70,6 +71,7 @@ int main(int argc, char *argv[]) {
     bool vertical = false;
     bool with_outline = false;
     bool reverse = false;
+    bool use_server_geometry = false;
     const char *host = NULL;
     std::string textfilename;
 
@@ -80,14 +82,18 @@ int main(int argc, char *argv[]) {
 
     ft::Font text_font;
     int opt;
-    while ((opt = getopt(argc, argv, "f:g:h:s:vo:c:b:l:OS:i:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:g:Gh:s:vo:c:b:l:OS:i:")) != -1) {
         switch (opt) {
         case 'g':
+            use_server_geometry = false;
             if (sscanf(optarg, "%dx%d%d%d%d", &width, &height, &off_x, &off_y, &off_z)
                 < 2) {
                 fprintf(stderr, "Invalid size spec '%s'", optarg);
                 return usage(argv[0]);
             }
+            break;
+        case 'G':
+            use_server_geometry = true;
             break;
         case 'h':
             host = strdup(optarg); // leaking. Ignore.
@@ -170,30 +176,6 @@ int main(int argc, char *argv[]) {
         measure_font = outline_font;
     }
 
-    // check height input and use default value if necessary
-    if (height < 0) {
-        height = vertical ? DEFAULT_HEIGHT : measure_font->height();
-    }
-
-    // check width input and use default font width of WIDEST_GLYPH if necessary
-    if (width < 0) {
-        width = vertical ? measure_font->CharacterWidth(WIDEST_GLYPH) : DEFAULT_WIDTH;
-    }
-
-    if (width < 1 || height < 1) {
-        fprintf(stderr, "%dx%d is a rather unusual size\n", width, height);
-        return usage(argv[0]);
-    }
-
-    int fd = OpenFlaschenTaschenSocket(host);
-    if (fd < 0) {
-        fprintf(stderr, "Cannot connect.\n");
-        return 1;
-    }
-
-    UDPFlaschenTaschen display(fd, width, height);
-    display.SetOffset(off_x, off_y, off_z);
-
     std::string str;
     if (textfilename == "-") textfilename = "/dev/stdin";
     if (!textfilename.empty()) {
@@ -221,6 +203,36 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "This looks like a very empty text.\n");
         return 1;
     }
+
+    int fd = OpenFlaschenTaschenSocket(host);
+    if (fd < 0) {
+        fprintf(stderr, "Cannot connect.\n");
+        return 1;
+    }
+
+    if (use_server_geometry
+        && !GetFlaschenTaschenDisplaySize(fd, &width, &height)) {
+        fprintf(stderr, "Display did not report its size.\n");
+        return 1;
+    }
+
+    // check height input and use default value if necessary
+    if (height < 0) {
+        height = vertical ? DEFAULT_HEIGHT : measure_font->height();
+    }
+
+    // check width input and use default font width of WIDEST_GLYPH if necessary
+    if (width < 0) {
+        width = vertical ? measure_font->CharacterWidth(WIDEST_GLYPH) : DEFAULT_WIDTH;
+    }
+
+    if (width < 1 || height < 1) {
+        fprintf(stderr, "%dx%d is a rather unusual size\n", width, height);
+        return usage(argv[0]);
+    }
+
+    UDPFlaschenTaschen display(fd, width, height);
+    display.SetOffset(off_x, off_y, off_z);
 
     // Center in in the available display space.
     const int y_pos = (height - measure_font->height()) / 2

@@ -52,8 +52,18 @@ $(FTLIB) :
 See the [../examples-api-use/Makefile](../examples-api-use/Makefile) to get
 inspired.
 
+The C++ UDP API also provides `GetFlaschenTaschenDisplaySize(socket, &width,
+&height)` to ask a connected server for the display dimensions before creating
+the framebuffer.
+
 ## Python
-(TODO(Scotty): describe how to use the Python library in the `ft/api`
-subdirectory)
+The Python API provides `flaschen.get_display_size(host, port)` and the
+`auto_size=True` constructor option:
+
+```python
+import flaschen
+
+ft = flaschen.Flaschen("localhost", 1337, auto_size=True)
+```
 
 [git-submodules]: http://git-scm.com/book/en/Git-Tools-Submodules

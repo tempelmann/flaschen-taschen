@@ -24,11 +24,13 @@
 #include "udp-flaschen-taschen.h"
 
 #include <assert.h>
+#include <errno.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/select.h>
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <unistd.h>
@@ -38,6 +40,15 @@
 #define DEFAULT_FT_DISPLAY_HOST "ft.noise"
 
 static const int kFlaschenTaschenHeaderReserve = 64;  // PPM header
+// Valid 1x1 transparent PPM for older servers. Newer servers recognize the
+// #FT:SIZE? marker before rendering it.
+static const char kSizeQueryPacket[] =
+    "P6\n"
+    "1 1\n"
+    "#FT: 0 0 15\n"
+    "#FT:SIZE?\n"
+    "255\n"
+    "\000\000\000";
 
 int OpenFlaschenTaschenSocket(const char *host) {
     if (host == NULL) {
@@ -82,6 +93,50 @@ int OpenFlaschenTaschenSocket(const char *host) {
 
     freeaddrinfo(addr_result);
     return fd;
+}
+
+bool GetFlaschenTaschenDisplaySize(int socket, int *width, int *height,
+                                   int timeout_ms) {
+    if (socket < 0 || width == NULL || height == NULL) return false;
+    if (write(socket, kSizeQueryPacket, sizeof(kSizeQueryPacket) - 1) < 0) {
+        perror("Querying display size");
+        return false;
+    }
+
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(socket, &read_fds);
+
+    struct timeval timeout;
+    timeout.tv_sec = timeout_ms / 1000;
+    timeout.tv_usec = (timeout_ms % 1000) * 1000;
+
+    int select_result;
+    do {
+        select_result = select(socket + 1, &read_fds, NULL, NULL, &timeout);
+    } while (select_result < 0 && errno == EINTR);
+
+    if (select_result <= 0) return false;
+
+    char response[128];
+    const ssize_t response_len = read(socket, response, sizeof(response) - 1);
+    if (response_len < 0) {
+        perror("Reading display size response");
+        return false;
+    }
+    response[response_len] = '\0';
+
+    int remote_width = 0;
+    int remote_height = 0;
+    if (sscanf(response, "#FT:SIZE %d %d", &remote_width, &remote_height) != 2
+        || remote_width <= 0 || remote_height <= 0) {
+        fprintf(stderr, "Invalid display size response: '%s'\n", response);
+        return false;
+    }
+
+    *width = remote_width;
+    *height = remote_height;
+    return true;
 }
 
 UDPFlaschenTaschen::UDPFlaschenTaschen(int socket, int width, int height,

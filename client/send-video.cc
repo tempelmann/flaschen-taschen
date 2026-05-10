@@ -72,7 +72,8 @@ size_t SendFrame(AVFrame *pFrame, UDPFlaschenTaschen *display) {
 static int usage(const char *progname) {
     fprintf(stderr, "usage: %s [options] <video>\n", progname);
     fprintf(stderr, "Options:\n"
-            "\t-g <width>x<height>[+<off_x>+<off_y>[+<layer>]] : Output geometry. Default 20x20+0+0\n"
+            "\t-g <width>x<height>[+<off_x>+<off_y>[+<layer>]] : Output geometry. Default 45x35+0+0\n"
+            "\t-G                 : Query display for width and height.\n"
             "\t-h <host>          : Flaschen-Taschen display hostname.\n"
             "\t-l <layer>         : Layer 0..15. Default 0 (note if also given in -g, then last counts)\n"
             "\t-t <repeat-secs>   : Loop until at least n seconds passed.\n"
@@ -129,17 +130,22 @@ int main(int argc, char *argv[]) {
     float repeatTimeout = 0;
     int verbose = 0;
     bool clear_after = false;
+    bool use_server_geometry = false;
     const char *ft_host = NULL;
 
     int opt;
-    while ((opt = getopt(argc, argv, "g:h:t:cvl:")) != -1) {
+    while ((opt = getopt(argc, argv, "g:Gh:t:cvl:")) != -1) {
         switch (opt) {
         case 'g':
+            use_server_geometry = false;
             if (sscanf(optarg, "%dx%d%d%d%d",
                        &display_width, &display_height, &off_x, &off_y, &off_z) < 2) {
                 fprintf(stderr, "Invalid size spec '%s'", optarg);
                 return usage(argv[0]);
             }
+            break;
+        case 'G':
+            use_server_geometry = true;
             break;
         case 'h':
             ft_host = strdup(optarg); // leaking. Ignore.
@@ -173,6 +179,12 @@ int main(int argc, char *argv[]) {
     const int ft_socket = OpenFlaschenTaschenSocket(ft_host);
     if (ft_socket < 0) {
         fprintf(stderr, "Couldn't open socket to FlaschenTaschen; did you provide correct hostname with -h <hostname> ?\n");
+        return -1;
+    }
+    if (use_server_geometry
+        && !GetFlaschenTaschenDisplaySize(ft_socket,
+                                          &display_width, &display_height)) {
+        fprintf(stderr, "Display did not report its size.\n");
         return -1;
     }
     UDPFlaschenTaschen display(ft_socket, display_width, display_height);

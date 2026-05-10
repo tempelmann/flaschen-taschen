@@ -25,10 +25,48 @@ P6
 255
 """
 
+_SIZE_QUERY = b"""\
+P6
+1 1
+#FT: 0 0 15
+#FT:SIZE?
+255
+\x00\x00\x00"""
+
+_SIZE_RESPONSE_PREFIX = b"#FT:SIZE"
+
+def get_display_size(host, port=1337, timeout=1.0):
+  '''Query a Flaschen Taschen server for its display size.
+
+  Args:
+    host: The flaschen taschen server hostname or ip address.
+    port: The flaschen taschen server port number.
+    timeout: Seconds to wait for a response.
+
+  Returns:
+    A (width, height) tuple.
+  '''
+  sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+  try:
+    sock.settimeout(timeout)
+    sock.connect((host, port))
+    sock.send(_SIZE_QUERY)
+    response = sock.recv(128).strip().split()
+    if len(response) != 3 or response[0] != _SIZE_RESPONSE_PREFIX:
+      raise RuntimeError("Invalid display size response: %r" % (b" ".join(response),))
+    width = int(response[1])
+    height = int(response[2])
+    if width <= 0 or height <= 0:
+      raise RuntimeError("Invalid display size: %dx%d" % (width, height))
+    return (width, height)
+  finally:
+    sock.close()
+
 class Flaschen(object):
   '''A Framebuffer display interface that sends a frame via UDP.'''
 
-  def __init__(self, host, port, width=0, height=0, layer=5, transparent=False):
+  def __init__(self, host, port, width=0, height=0, layer=5, transparent=False,
+               auto_size=False):
     '''
 
     Args:
@@ -38,7 +76,10 @@ class Flaschen(object):
       height: The height of the flaschen taschen display in pixels.
       layer: The layer of the flaschen taschen display to write to.
       transparent: If true, black(0, 0, 0) will be transparent and show the layer below.
+      auto_size: If true, query the server and use its width and height.
     '''
+    if auto_size:
+      width, height = get_display_size(host, port)
     self.width = width
     self.height = height
     self.layer = layer
@@ -123,7 +164,7 @@ class Flaschen(object):
 
     w = array.shape[1]
     h = array.shape[0]
-    self._send_data(array.tobytes(), cols, rows, offset)
+    self._send_data(array.tobytes(), w, h, offset)
 
   def _send_data(self, data, cols, rows, offset):
     # Fixes issue #77

@@ -173,6 +173,7 @@ static int usage(const char *progname) {
     fprintf(stderr, "usage: %s [options]\n", progname);
     fprintf(stderr, "Options:\n"
             "\t-g <width>x<height>[+<off_x>+<off_y>[+<layer>]] : Output geometry. Default 45x35\n"
+            "\t-G              : Query display for width and height.\n"
             "\t-l <layer>      : Layer 0..15. Default 0 (note if also given in -g, then last counts)\n"
             "\t-h <host>       : Flaschen-Taschen display hostname.\n"
             "\t-p <port>       : Game input port.\n"
@@ -191,6 +192,7 @@ int RunGame(const int argc, char *argv[], Game *game) {
     int off_z = 0;
     int remote_port = 4321;
     Color background(0, 0, 0);
+    bool use_server_geometry = false;
 
     if (argc < 2) {
         fprintf(stderr, "Mandatory argument(s) missing\n");
@@ -198,14 +200,18 @@ int RunGame(const int argc, char *argv[], Game *game) {
     }
 
     int opt;
-    while ((opt = getopt(argc, argv, "g:l:h:p:b:")) != -1) {
+    while ((opt = getopt(argc, argv, "g:Gl:h:p:b:")) != -1) {
         switch (opt) {
         case 'g':
+            use_server_geometry = false;
             if (sscanf(optarg, "%dx%d%d%d%d", &width, &height, &off_x, &off_y, &off_z)
                 < 2) {
                 fprintf(stderr, "Invalid size spec '%s'", optarg);
                 return usage(argv[0]);
             }
+            break;
+        case 'G':
+            use_server_geometry = true;
             break;
         case 'p':
             remote_port = atoi(optarg);
@@ -241,6 +247,15 @@ int RunGame(const int argc, char *argv[], Game *game) {
     font.LoadFont("fonts/5x5.bdf");  // TODO: don't hardcode.
 
     const int display_socket = OpenFlaschenTaschenSocket(hostname);
+    if (display_socket < 0) {
+        fprintf(stderr, "Cannot connect.\n");
+        return 1;
+    }
+    if (use_server_geometry
+        && !GetFlaschenTaschenDisplaySize(display_socket, &width, &height)) {
+        fprintf(stderr, "Display did not report its size.\n");
+        return 1;
+    }
     UDPFlaschenTaschen display(display_socket, width, height);
     display.SetOffset(off_x, off_y, off_z);
 

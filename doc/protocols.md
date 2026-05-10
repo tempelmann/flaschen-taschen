@@ -69,6 +69,30 @@ The optional offset determines where the image is displayed on the
 Flaschen Taschen display relative to the top left corner (provided in the
 [remote Flaschen Taschen class][cpp-client-api] as a `SetOffset(x, y, z)` method).
 
+### Display Size Query
+
+Clients can ask the UDP server which display size it is currently driving by
+sending a tiny valid PPM packet that contains an `#FT:SIZE?` comment:
+
+```
+P6
+1 1
+#FT: 0 0 15
+#FT:SIZE?
+255
+```
+
+followed by one black RGB pixel. Servers that support the query reply to the
+sender with:
+
+```
+#FT:SIZE <width> <height>
+```
+
+The request is intentionally also a valid one-pixel image, so older servers
+that do not understand the query ignore the size request and only receive a
+transparent layer update.
+
 ### Offsets, how do they work ?
 
 The **(x,y) offset** allows to place an image at an arbitrary position on the

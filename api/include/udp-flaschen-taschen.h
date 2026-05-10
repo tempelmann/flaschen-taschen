@@ -27,6 +27,11 @@
 // If that is not set, uses the default display installation.
 int OpenFlaschenTaschenSocket(const char *host);
 
+// Query the connected FlaschenTaschen UDP server for the display dimensions.
+// Returns true and sets width/height if the server replies before timeout.
+bool GetFlaschenTaschenDisplaySize(int socket, int *width, int *height,
+                                   int timeout_ms = 1000);
+
 // A Framebuffer display interface that sends a frame via UDP. Makes things
 // simple.
 class UDPFlaschenTaschen : public FlaschenTaschen {
