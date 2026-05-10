@@ -86,6 +86,19 @@ Regular terminal             | With `--hd-terminal` Option   |
 <img src="../img/terminal-screenshot.png" width="100px">
 <img src="../img/terminal-screenshot-nb.png" width="100px">
 
+### Python Window
+
+There is also a small Python/OpenCV server that displays incoming UDP packets
+in a window. It uses the same protocol and replies to display-size queries, so
+clients can use their `-G` option.
+
+```bash
+python3 -m pip install opencv-python
+python3 python/ft-window-server.py -D384x256
+```
+
+See [`python/README.md`](python/README.md) for options.
+
 
 ### RGB Matrix Panel Display
 
