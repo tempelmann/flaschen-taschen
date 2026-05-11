@@ -27,3 +27,8 @@ Options:
 
 The server understands `#FT:` offsets/layers and replies to `#FT:SIZE?`, so
 clients can use their `-G` option to discover the configured dimensions.
+
+Full-width row stripes are buffered until all display rows for the frame have
+arrived before the window is refreshed. The UDP receive loop runs on a separate
+thread with a larger socket receive buffer, so packet intake is not blocked by
+OpenCV redraws on slower window systems.

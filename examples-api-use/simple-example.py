@@ -4,7 +4,7 @@ import time
 
 # Getting "Message too long"? Need to fix the max UDP size – see client/README.md
 
-UDP_IP = 'pi4'
+UDP_IP = 'localhost'
 UDP_PORT = 1337
 
 N = 256
